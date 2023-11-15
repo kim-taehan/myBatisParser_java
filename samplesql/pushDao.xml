@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="PushDAO">
+ 	<resultMap id="PackageHeaderMap"               type="java.util.HashMap">
+       <result property="java.lang.String"         column="row_id"/>
+       <result property="object"                   column="PackageBeanResult"/>
+    </resultMap>
+    
+	<insert id="insertPush" parameterType="map" useGeneratedKeys="true">
+		INSERT INTO sftm.delete_table1
+		(	
+			id , 
+			push_code,
+			title, 
+			msg, 
+			event,
+			recv_user, 
+			recv_yn, 
+			reg_user, 
+			reg_date 
+		)
+		VALUES (
+			nextval('sftm.itm_push_id_seq'::REGCLASS),
+			#{ push_code },
+			#{ title },
+			#{ msg} ,
+			#{ event} , 
+			#{ recv_user }, 
+			'N', 
+			#{ reg_user },
+			now()
+		)
+  	</insert>
+	
+	<select id="selectPushListById" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	    select ps.id
+			, ps.push_code
+			, sftm.GET_CODENAME('P001', ps.push_code) as push_code_name
+			, ps.title
+			, ps.msg
+			, ps.event
+			, ps.reg_user
+			, us.name as req_user_name 
+			, ps.reg_date
+			, to_char(ps.reg_date, 'YYYY-MM-DD HH24:MI') reg_date_str
+			,sftm.GET_WHAT_DAY( ps.reg_date) as what_day
+		from sftm.itm_push ps
+		 	left outer join sftm.itm_user us on us.user_id = ps.reg_user
+		where 1=1
+		and recv_user = #{cookieUserId} 
+		and recv_yn != 'Y'
+		order by ps.reg_date desc
+		limit 3
+	</select>
+	
+	<select id="selectPushListByUser" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	   select ps.id
+			, ps.push_code
+			, sftm.GET_CODENAME('P001', ps.push_code) as push_code_name
+			, ps.title
+			, ps.msg
+			, ps.event
+			, ps.reg_user
+			, coalesce(us.name,'') as req_user_name 
+			, ps.reg_date
+			, sftm.GET_WHAT_DAY(ps.reg_date) reg_date_str
+		from sftm.itm_push ps
+		 	left outer join sftm.itm_user us on us.user_id = ps.reg_user
+		where 1=1
+		and recv_user = #{cookieUserId}
+		order by ps.reg_date desc
+	</select>
+	
+	
+	
+    <update id="updatePushListById" parameterType="java.util.HashMap">
+    UPDATE
+        sftm.itm_push
+    SET
+        recv_yn = 'Y',
+        recv_date =NOW() 
+    WHERE
+       recv_user = #{cookieUserId}
+    </update> 
+    
+    
+    <insert id="insertAuto" parameterType="map" useGeneratedKeys="true">
+		INSERT INTO sftm.itm_auto
+		(	
+			id , 
+			title,
+			case_id,  
+			defect_id,  
+			html,  
+			use_yn,
+			reg_user, 
+			reg_date 
+		)
+		VALUES (
+			nextval('sftm.itm_auto_id_seq'::REGCLASS),
+			#{ title }, 
+			#{ case_id }, 
+			#{ defect_id }, 
+			#{ html, }, 
+			'y',
+			#{ reg_user },
+			now()
+		)
+  	</insert>
+
+	
+	
+  	<!-- selectAutoList : 테스트자동화 화면에서 list 조회시 -->
+	<select id="selectAutoList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	    select auto.id, 
+	    	auto.case_id, 
+	    	coalesce(tc.case_name, '') as case_name,
+			auto.defect_id, 
+			coalesce(df.title, '') as defect_name,
+	    	auto.reg_user, 
+	    	coalesce(auto.title, '무제') as title,
+			us.name,
+	    	to_char(auto.reg_date, 'YYYY-MM-DD HH24:MI') reg_date
+	    from sftm.itm_auto as auto
+			left outer join sftm.itm_user us on auto.reg_user = us.user_id
+			left outer join sftm.itm_test_case tc on auto.case_id = tc.case_id
+			left outer join sftm.itm_defect df on auto.defect_id = df.defect_id
+	    where 1=1
+	    and auto.use_yn != 'n'  
+	    <if test="case_id != null and case_id != ''"> 
+	    	and auto.case_id = #{case_id}::bigint
+	    </if>
+	    <if test="defect_id != null and defect_id != ''"> 
+	    	and auto.defect_id = #{defect_id}::bigint
+	    </if>
+	    order by auto.reg_date desc
+	</select>
+	
+
+  	
+
+	
+	
+	<select id="selectAutotestId" resultType="java.lang.Integer">
+		select
+		nextval('sftm.itm_autotest_id_seq'::regclass);
+	</select>
+	
+	
+	<insert id="insertAutotest" parameterType="map" useGeneratedKeys="true">
+		INSERT INTO sftm.itm_autotest
+		(	
+			id
+			, auto_id
+			, count
+			, excute_yn 
+			, use_yn
+			, reg_user
+			, reg_date
+		)
+		VALUES (
+			#{ id }::bigint, 
+			#{ auto_id }::bigint, 
+			#{ count }::bigint, 
+			'N', 
+			'Y',  
+			#{ cookieUserId },
+			now()
+		)
+  	</insert>
+  	
+  	<insert id="insertAutotestDetail" parameterType="map" useGeneratedKeys="true">
+		INSERT INTO sftm.itm_autotest_detail
+		(	
+			autotest_id
+			, seq
+			, html 
+		)
+		VALUES (
+			#{ autotest_id }::bigint, 
+			#{ seq }::bigint, 
+			#{ html }
+		)
+  	</insert> 
+  	
+  	<select id="selectDefectInfoForPush" parameterType="java.lang.Integer" resultMap="PackageHeaderMap">
+  		select df.title      -- 결함 Title
+			, df.dev_id --결함 담당개발자
+			, (select name from sftm.itm_user where user_id =  df.dev_id) as dev_user_name
+			, df.test_id    --결함 등록자
+			, (select name from sftm.itm_user where user_id =  df.test_id) as test_user_name
+			, df.defect_code
+			, sftm.GET_CODENAME('B001', df.defect_code) as defect_code_name
+			, df.defect_type
+			, sftm.GET_CODENAME('A001', df.defect_type) as test_defect_name
+			, tm.reader_id 
+			, tm.id as team_id
+		from sftm.itm_defect df, 
+			sftm.itm_scenario sc,
+			sftm.itm_div dv,
+			sftm.itm_team tm
+		where df.defect_id = #{id}::bigint
+		and df.scenario_id = sc.scenario_id 
+		and dv.div_id = sc.div_id
+		and dv.team_id = tm.id
+  	</select>
+  	
+  	
+    <select id="selectAutotest_detail" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	   select * 
+		from sftm.itm_autotest_detail
+		where autotest_id = #{id}::bigint
+	</select>
+	
+	
+    <update id="updateAutotest" parameterType="java.util.HashMap">
+	    update
+	        sftm.itm_autotest
+	    set
+	        excute_yn = 'Y',
+	        excute_date =NOW() 
+	    where
+	       id = #{autotest_id}::bigint
+    </update> 
+    
+    <update id="updateAutotest_detail" parameterType="java.util.HashMap">
+	    update
+	        sftm.itm_autotest_detail
+	    set
+	        success_yn = #{success_yn},
+	        result = #{result} 
+	    where autotest_id = #{autotest_id}::bigint
+	    and seq = #{seq}::bigint
+    </update> 
+    
+	
+</mapper>

@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="StatDAO">
+ 	<resultMap id="PackageHeaderMap"               type="java.util.HashMap">
+       <result property="java.lang.String"         column="row_id"/>
+       <result property="object"                   column="PackageBeanResult"/>
+    </resultMap>
+    
+    
+    
+    <select id="selectStatUserListSum" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+    	
+	select us.user_id  
+		, MAX(tm.id) as team_id
+		, MAX(us.name) as name
+		, MAX(tm.name) as team_name
+		, SUM(st.case_cnt) as case_cnt
+		, SUM(st.sum_time) as sum_time
+		, SUM(st.non_defect_cnt) as non_defect_cnt
+		, SUM(st.delay_cnt) as delay_cnt
+		, SUM(st.completed_cnt) as completed_cnt
+		, SUM(st.defect_cnt) as defect_cnt
+		, SUM(st.required_cnt) as required_cnt
+		, SUM(st.tran_cnt) as tran_cnt
+		, SUM(st.real_defect_cnt) as real_defect_cnt
+		, SUM(st.reject_cnt) as reject_cnt
+		
+		from sftm.itm_stat st
+			, sftm.itm_user us
+			, sftm.itm_team tm
+		where st.user_id = us.user_id
+		and us.team_id = tm.id
+		
+		and st.base_date = #{base_date}
+	    <if test="team_id != null and team_id != ''"> 
+	  		AND us.TEAM_ID = #{team_id}::bigint
+	    </if>  
+	     
+	     
+		group by us.user_id
+    </select>
+    
+    <select id="selectStatUserList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+    	
+    	select tm.id as team_id, us.name AS name
+			, tm.name as team_name
+			, st.*
+		from sftm.itm_stat st
+			, sftm.itm_user us
+			, sftm.itm_team tm
+			
+		where st.user_id = us.user_id
+		and us.team_id = tm.id
+		and st.base_date = #{base_date}
+		<if test="project_id != null and project_id != ''"> 
+	  		 AND st.project_id = #{project_id}::bigint
+	     </if>
+	     <if test="team_id != null and team_id != ''"> 
+	  		 AND us.TEAM_ID = #{team_id}::bigint
+	     </if>  
+    </select>
+  
+  	
+	<select id="selectStatTeamList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+		
+		select 
+		
+		 MAX(tm.id) as team_id
+		, MAX(tm.name) as team_name
+		, (SELECT name FROM sftm.itm_user where tm.reader_id = user_id) as reader
+		, (SELECT COUNT(*) FROM sftm.itm_user ius where MAX(tm.id) = ius.team_id) as dev_cnt
+		, SUM(st.case_cnt) as case_cnt
+		, SUM(st.sum_time) as sum_time
+		, SUM(st.non_defect_cnt) as non_defect_cnt
+		, SUM(st.delay_cnt) as delay_cnt
+		, SUM(st.completed_cnt) as completed_cnt
+		, SUM(st.defect_cnt) as defect_cnt
+		, SUM(st.required_cnt) as required_cnt
+		, SUM(st.tran_cnt) as tran_cnt
+		, SUM(st.real_defect_cnt) as real_defect_cnt
+		, SUM(st.reject_cnt) as reject_cnt
+		from sftm.itm_stat st
+			, sftm.itm_user us
+			, sftm.itm_team tm
+			
+		where st.user_id = us.user_id
+		and us.team_id = tm.id
+		and st.base_date =  #{base_date}
+		
+		<if test="project_id != null and project_id != ''"> 
+	  		 AND st.project_id = #{project_id}::bigint
+	     </if>
+	 
+	 	GROUP BY tm.id
+	    
+	</select>
+  	<!-- 사용자 조회 -->
+	<select id="selectStatTeamListOld" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	    
+	SELECT 
+		--TM.ID,
+		TM.NAME AS TEAM_NAME,
+		--결함통계1
+		SUM(COALESCE(TC.CASE_CNT, 0)) AS CASE_CNT,  			--수행중/완료인 테스트케이스 건수
+		SUM(COALESCE(DF.DEFECT_CNT, 0))  AS DEFECT_CNT,     	--DEFECT 총건수 
+		SUM(COALESCE(DF.A001_02, 0) + COALESCE(DF.A001_03, 0))  AS NOT_DEFECT_CNT, 						 --비결함건수 
+			  AS REQUIRED_CNT,  --조치필요건
+	 	--결함통계2
+	 	SUM(COALESCE(DF2.REJECT_CNT, 0))  AS REJECT_CNT,     	--반려건수
+	 	COUNT(*) TEAM_CNT, --팀원
+		COALESCE( (SELECT IUS.NAME FROM SFTM.ITM_USER AS IUS WHERE TM.READER_ID = IUS.USER_ID ),'TBD') AS READER
+		FROM SFTM.ITM_USER US
+			LEFT OUTER JOIN 
+		 (
+			SELECT DEFECT_USER 
+			 ,COALESCE( COUNT(*) FILTER(WHERE 1 = 1), 0) AS DEFECT_CNT
+			 ,COALESCE( COUNT(*) FILTER(WHERE TEST_TYPE = 'A001_01'), 0) AS A001_01
+			 ,COALESCE( COUNT(*) FILTER(WHERE TEST_TYPE = 'A001_02'), 0) AS A001_02
+			 ,COALESCE( COUNT(*) FILTER(WHERE TEST_TYPE = 'A001_03'), 0) AS A001_03 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_01'), 0) AS B001_01 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_02'), 0) AS B001_02 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_03'), 0) AS B001_03 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_04'), 0) AS B001_04 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_05'), 0) AS B001_05 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_06'), 0) AS B001_06 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_07'), 0) AS B001_07 
+				FROM SFTM.ITM_DEFECT DF, 
+					SFTM.ITM_DEFECT_HISTORY HIS
+				WHERE DF.DEFECT_ID = HIS.DEFECT_ID
+				<if test="project_id != null and project_id != ''"> 
+			  		 AND DF.project_id = #{project_id}::bigint
+			     </if>
+				AND HIS.SEQ = (SELECT MAX(HIS2.SEQ) FROM  SFTM.ITM_DEFECT_HISTORY HIS2 WHERE HIS.DEFECT_ID = HIS2.DEFECT_ID)
+				GROUP BY DEFECT_USER
+		
+			 ) AS DF ON  DF.DEFECT_USER = US.USER_ID 
+			LEFT OUTER JOIN
+			 (
+				SELECT COUNT(*) CASE_CNT, DEV_ID 
+				FROM SFTM.ITM_TEST_CASE ICS
+				WHERE ICS.STATE != 'C001_01' --수행대기건은 제외함
+				<if test="project_id != null and project_id != ''"> 
+			  		 AND ICS.project_id = #{project_id}::bigint
+		    	</if>
+				GROUP BY DEV_ID 
+			  ) AS TC ON TC.DEV_ID = US.USER_ID
+			LEFT OUTER JOIN
+			(
+				SELECT DEFECT_USER, 
+					COALESCE( COUNT(*) FILTER(WHERE DH.DEFECT_CODE = 'B001_07'), 0) AS REJECT_CNT
+				FROM SFTM.ITM_DEFECT AS DF
+				, SFTM.ITM_DEFECT_HISTORY AS DH
+				WHERE 1=1
+				<if test="project_id != null and project_id != ''"> 
+			  		 AND DF.project_id = #{project_id}::bigint
+		    	</if>
+				AND DF.DEFECT_ID = DH.DEFECT_ID
+				GROUP BY DF.DEFECT_USER
+			) AS DF2 ON DF2.DEFECT_USER = US.USER_ID 
+			, SFTM.ITM_TEAM TM 
+			 
+		WHERE US.TEAM_ID = TM.ID
+		AND TM.ROLE_CODE = 'DEV' 
+		GROUP BY TM.ID
+		ORDER BY TM.NAME
+	</select>
+  	
+  	
+  	<!-- 메인화면 테스터가 확인하는 데이터 -->
+	<select id="selectMainDataForTesterTc" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+		
+		select cd.code_id 
+			, COALESCE(me.count , 0)||'' as user
+			, COALESCE(we.count , 0)||'' as team
+			, COALESCE(pj.count , 0)||'' as project
+		from sftm.itm_code cd
+		left outer join (
+				select state, count(*)
+				from sftm.itm_test_case
+				where tester_id = #{test_user}
+				<if test="project_id != null and project_id != ''"> 
+			  		 AND project_id = #{project_id}::bigint
+		    	</if>
+				group by state
+			) me on cd.code_id = me.state
+		left outer join (
+				select state, count(*)
+				from sftm.itm_test_case
+				where tester_id in (select user_id from sftm.itm_user us where  us.team_id = #{team_id}::bigint)
+				<if test="project_id != null and project_id != ''"> 
+			  		 AND project_id = #{project_id}::bigint
+		    	</if>
+				group by state
+			) we on cd.code_id = we.state	
+			
+		left outer join (
+				select state, count(*)
+				from sftm.itm_test_case 
+				where 1=1
+				<if test="project_id != null and project_id != ''"> 
+			  		 AND project_id = #{project_id}::bigint
+		    	</if>
+				group by state
+			) pj on cd.code_id = pj.state
+		where code_group = 'C001' 
+		
+	</select>
+	
+	<!-- 메인화면 테스터가 확인하는 데이터 -->
+	<select id="selectMainDataForTesterDf" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+		select cd.code_id 
+			, coalesce(me.count , 0)||'' as user
+			, COALESCE(we.count , 0)||'' as team
+			, COALESCE(pj.count , 0)||'' as project
+		from sftm.itm_code cd
+		left outer join (
+			select defect_code, count(*)
+			from sftm.itm_defect df
+			where 1=1
+			<if test="dev_user != null and dev_user != ''"> 
+				and df.dev_id = #{dev_user}
+			</if>
+			<if test="test_user != null and test_user != ''"> 
+				and df.test_id = #{test_user}
+			</if>
+			<if test="project_id != null and project_id != ''"> 
+		  		 and df.project_id = #{project_id}::bigint
+	    	</if>
+			group by defect_code
+		) me on cd.code_id = me.defect_code
+		left outer join (
+			select df.defect_code, count(*)
+			from sftm.itm_defect df
+				, sftm.itm_scenario sc
+				, sftm.itm_div div
+				where df.scenario_id = sc.scenario_id
+				and sc.div_id = div.div_id
+			<if test="reg_user != null and reg_user != ''"> 
+				and df.test_id in (select user_id from sftm.itm_user where team_id = #{team_id}::bigint)
+			</if>
+			<if test="team_id != null and team_id != ''"> 
+				and div.team_id = #{team_id}::bigint
+			</if>
+			
+			<if test="project_id != null and project_id != ''"> 
+		  		 AND df.project_id = #{project_id}::bigint
+	    	</if>
+			group by defect_code
+		) we on cd.code_id = we.defect_code	
+		left outer join (
+			select defect_code, count(*)
+			from sftm.itm_defect df
+			where 1=1
+			<if test="project_id != null and project_id != ''"> 
+		  		 AND df.project_id = #{project_id}::bigint
+	    	</if>
+			group by defect_code
+		) pj on cd.code_id = pj.defect_code
+		where code_group = 'B001' 
+	</select>
+
+	<select id="selectStatUserListBatch" resultMap="PackageHeaderMap">
+		select  us.user_id    
+		, us.project_id 
+		, coalesce(tc.case_cnt, 0) as case_cnt    -- 케이스건수
+		, coalesce(df.defect_cnt, 0) as defect_cnt  -- 결함건수  
+		, coalesce(df.b001_02, 0) + coalesce(df.b001_07, 0) as required_cnt -- 조치필요건건 
+		, coalesce(df.b001_05, 0) 	 as delay_cnt   -- 지연건수 
+		, coalesce(df.b001_03, 0) + coalesce(df.b001_04, 0)+ coalesce(df.b001_06, 0) as completed_cnt -- 조치완료건 
+		, coalesce(df.a001_01, 0) as real_defect_cnt --진짜결함
+		, coalesce(df.a001_02, 0) + coalesce(df.a001_03, 0) as non_defect_cnt -- 조치필요건건 
+		, coalesce(df2.reject_cnt, 0)  as reject_cnt -- 조치필요건건 
+	 	from (
+			select us.user_id, 
+				pj.id as project_id 
+			from sftm.itm_user us
+				, sftm.itm_team tm
+				, sftm.itm_project pj
+			where us.team_id = tm.id
+			and tm.role_code = 'DEV'
+		) us
+			left outer join 
+		 (
+			select dev_id , project_id
+			 ,coalesce( count(*) filter(where 1 = 1), 0) as defect_cnt
+			 ,coalesce( count(*) filter(where defect_type = 'A001_01'), 0) as a001_01
+			 ,coalesce( count(*) filter(where defect_type = 'A001_02'), 0) as a001_02
+			 ,coalesce( count(*) filter(where defect_type = 'A001_03'), 0) as a001_03 
+			 ,coalesce( count(*) filter(where defect_type = 'A001_04'), 0) as a001_04 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_01'), 0) as b001_01 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_02'), 0) as b001_02 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_03'), 0) as b001_03 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_04'), 0) as b001_04 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_05'), 0) as b001_05 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_06'), 0) as b001_06 
+			 ,coalesce( count(*) filter(where defect_code = 'B001_07'), 0) as b001_07 
+				from sftm.itm_defect df
+				group by dev_id, project_id
+		
+			 ) as df on  df.dev_id = us.user_id and df.project_id = us.project_id
+			left outer join
+			 (
+				select count(*) case_cnt, dev_id, project_id
+				from sftm.itm_test_case ics 
+				group by dev_id, project_id
+			  ) as tc on tc.dev_id = us.user_id and tc.project_id = us.project_id
+			  
+			left outer join
+			(
+				select dev_id, project_id,
+					coalesce( count(*) filter(where df.defect_code = 'B001_07'), 0) as reject_cnt
+				from sftm.itm_defect as df 
+				where 1=1 
+				group by df.dev_id, df.project_id
+			) as df2 on df2.dev_id = us.user_id and df2.project_id = us.project_id
+			order by user_id
+	</select>
+	
+	<select id="selectUserDefectListBatch" resultMap="PackageHeaderMap">
+		select df.defect_id || '' as defect_id,
+			dh.seq, 
+			dh.defect_code,
+			to_char(dh.reg_date, 'YYYY-MM-DD HH24:MI') reg_date_str
+		from sftm.itm_defect df
+		, sftm.itm_defect_history dh
+		where df.defect_id = dh.defect_id
+		and df.dev_id = #{user_id}
+		and df.project_id = #{project_id}::bigint
+		and dh.defect_code NOT IN( 'B001_01', 'B001_06')
+		order by dh.defect_id, dh.seq
+	</select>
+	
+	 <insert id="insertStatBatch" parameterType="map" useGeneratedKeys="true">
+	INSERT INTO sftm.itm_stat
+	(
+		base_date 	 
+		,user_id 	 
+		,project_id 	 
+		,case_cnt	 
+		,sum_time	 
+		,non_defect_cnt	
+		,delay_cnt		
+		,completed_cnt	
+		,defect_cnt		
+		,required_cnt	
+		,tran_cnt		
+		,real_defect_cnt	
+		,reject_cnt
+		,reg_user
+		,reg_date
+	)
+	VALUES(
+		 #{base_date} 
+		,#{user_id} 	 
+		,#{project_id}::bigint 	 
+		,#{case_cnt}::bigint	 
+		,#{sum_time}::bigint	 
+		,#{non_defect_cnt}::bigint	
+		,#{delay_cnt}::bigint		
+		,#{completed_cnt}::bigint	
+		,#{defect_cnt}::bigint		
+		,#{required_cnt}::bigint	
+		,#{tran_cnt}::bigint		
+		,#{real_defect_cnt}::bigint		
+		,#{reject_cnt}::bigint	
+		,'admin'
+		,now()
+	
+	)
+	</insert>
+	
+	<delete id="deleteStatBatch" parameterType="java.util.HashMap">
+		DELETE
+		FROM sftm.itm_stat 
+		WHERE base_date = #{base_date} 
+    </delete> 
+</mapper>

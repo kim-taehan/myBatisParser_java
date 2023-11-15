@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="BorderDAO">
+ 	<resultMap id="PackageHeaderMap"               type="java.util.HashMap">
+       <result property="java.lang.String"         column="row_id"/>
+       <result property="object"                   column="PackageBeanResult"/>
+    </resultMap>
+    
+    <!-- 코드 그룹 조회 -->
+	<select id="selectBorderList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+
+	    select
+			bd.id , 
+			bd.type_code,
+			sftm.GET_CODENAME('D001', bd.type_code) type_name,
+			bd.title,  
+			bd.manager_user,
+		-- test
+			coalesce(mg.name, '') as manager_user_name,
+			bd.imgkey,  
+			bd.reg_user, 
+			coalesce(reg.name, '') as reg_user_name,
+			to_char(bd.reg_date , 'YYYY-MM-DD HH24:MI') reg_date,
+		(select temp.test from tb_test2 as temp where bd.title = temp.title) as key
+		from sftm.itm_border bd, item_test tt
+		left outer join sftm.itm_user mg
+			on bd.manager_user = mg.user_id
+		left outer join sftm.itm_user reg
+			on bd.reg_user = reg.user_id
+		where bd.use_yn= 'Y'
+	    <if test="type_code != null and type_code != ''">
+	    	and bd.type_code = #{type_code}
+	    </if>
+		and bd.use_yn= 'Y'
+		order by bd.user_yn, bd.id
+	</select>
+	
+	<select id="selectBorderDetail" parameterType="java.lang.Integer" resultMap="PackageHeaderMap">
+  		select
+			bd.id , 
+			bd.type_code,
+			sftm.GET_CODENAME('D001', bd.type_code) type_name,
+			bd.title,  
+			bd.manager_user,
+			coalesce(mg.name, '') as manager_user_name,
+			bd.imgkey, 
+			bd.reg_user, 
+			coalesce(reg.name, '') as reg_user_name,
+			to_char(bd.reg_date , 'YYYY-MM-DD HH24:MI') reg_date,
+			bd.imgkey,
+			bd.msg
+		from sftm.itm_border bd
+		left outer join sftm.itm_user mg
+			on bd.manager_user = mg.user_id
+		left outer join sftm.itm_user reg
+			on bd.reg_user = reg.user_id
+		where bd.id = #{id}
+
+  	</select>
+  	
+  	<!-- 게시판 seq -->
+	<select id="selectBorderId" resultType="java.lang.Integer">
+		select nextval('sftm.itm_border_id_seq'::regclass);
+		
+	</select>
+	
+	<insert id="insertBorder" parameterType="map" useGeneratedKeys="true">
+		insert into sftm.itm_border
+		(
+			id , 
+			type_code,
+			title, 
+			msg, 
+			manager_user,
+			imgkey,
+			use_yn,
+			reg_user, 
+			reg_date,
+			modify_user,
+			modify_date
+		)
+		VALUES (
+			#{border_id}::bigint, 
+			#{type_code},
+			#{title},
+			#{msg},
+			#{manager_user}, 
+			#{imgkey}::bigint, 
+			'Y', 
+			#{cookieUserId} , 
+			now(),	
+			#{cookieUserId} , 
+			now()
+		)
+	</insert>
+	
+	<update id="updateBorder" parameterType="map" useGeneratedKeys="true">
+	update sftm.itm_border
+		set type_code=#{type_code}
+			, title=#{title}
+			, msg=#{msg}
+			, manager_user=#{manager_user}
+			, imgkey=#{imgkey}::bigint
+	   		<if test="use_yn != null and use_yn != ''"> 
+				, use_yn=#{use_yn}
+			</if>
+			, modify_user=  #{cookieUserId}
+			, modify_date=now()
+	where id = #{border_id}::bigint
+    </update>
+    
+    <!-- 코드 그룹 조회 -->
+	<select id="selectSitemapList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	    select
+			st.id
+			, st.title
+			, st.sub_title
+			, st.url
+			, st.login_info
+			, st.priority
+			, st.use_yn
+			, st.test_page_yn
+			, st.reg_user
+			, reg.name as reg_user_name
+			, to_char(st.reg_date , 'YYYY-MM-DD HH24:MI') reg_date
+			, st.modify_user
+			, mod.name as modify_user_name
+			, to_char(st.modify_date , 'YYYY-MM-DD HH24:MI') modify_date 
+		from sftm.itm_sitemap st
+		left outer join sftm.itm_user mod
+			on st.modify_user = mod.user_id
+		left outer join sftm.itm_user reg
+			on st.reg_user = reg.user_id
+	    <if test="use_yn != null and use_yn != ''"> 
+	    	and st.use_yn = 'Y'
+	    </if>
+	    <if test="test_page_yn != null and test_page_yn != ''"> 
+	    	and st.test_page_yn = 'Y'
+	    </if>
+	    order by st.priority desc
+	</select>
+    
+    <insert id="insertSitemap" parameterType="map" useGeneratedKeys="true">
+		insert into sftm.itm_sitemap
+		(id, title, sub_title, url, login_info, priority, use_yn, test_page_yn, reg_user, reg_date, modify_user, modify_date)
+		values (
+			nextval('sftm.itm_border_id_seq'::regclass)
+			, #{title}
+			, #{sub_title}
+			, #{url}
+			, #{login_info}
+			, #{priority}::bigint
+			,  #{use_yn}
+			,  #{test_page_yn}
+			, #{cookieUserId} 
+			, now()
+			, #{cookieUserId} 
+			, now()
+		)
+	</insert>
+	
+	<update id="updateSitemap" parameterType="map" useGeneratedKeys="true">
+		update sftm.itm_sitemap
+			set  title=#{title}
+				, sub_title=#{sub_title}
+				, url=#{url}
+				, login_info=#{login_info} 
+				, priority=#{priority}::bigint
+				, use_yn=#{use_yn}
+				, test_page_yn=#{test_page_yn}
+				, modify_user=  #{cookieUserId}
+				, modify_date=now()
+		where id = #{id}::bigint
+    </update>
+    
+    
+</mapper>
+
+ 

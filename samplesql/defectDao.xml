@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="DefectDAO">
+	<resultMap id="PackageHeaderMap" type="java.util.HashMap">
+		<result property="java.lang.String" column="row_id" />
+		<result property="object" column="PackageBeanResult" />
+	</resultMap>
+
+	<!-- 결함 리스트 조회 -->
+	<select id="selectDefectList" parameterType="java.util.Map"
+		resultMap="PackageHeaderMap">
+		SELECT row_number() OVER () as rnum,
+			defect.* ,
+			sftm.GET_CODENAME('B001', defect.defect_code) defect_code_name,
+			sftm.GET_CODENAME('A001', defect.defect_type) defect_type_name,
+			to_char(defect.reg_date, 'YYYY-MM-DD') reg_date_str,
+			COALESCE(to_char(defect.resolve_date, 'YYYY-MM-DD'), '-') resolve_date_str,
+			COALESCE(dev.name, '') dev_name,
+			COALESCE(reg.name, '') test_name
+		FROM sftm.itm_defect defect
+			LEFT JOIN sftm.itm_user dev 
+				ON defect.dev_id = dev.user_id
+			LEFT JOIN sftm.itm_user reg 
+				on defect.test_id = reg.user_id
+		WHERE 1=1
+		<if test="scenario_id != null and scenario_id != ''">
+			AND defect.scenario_id = #{scenario_id}::bigint
+		</if>
+		<if test="case_id != null and case_id != ''">
+			AND defect.case_id = #{case_id}::bigint
+		</if>
+
+	</select>
+	<!-- 사용자 조회 -->
+	<select id="selectDefectById" parameterType="int"
+		resultMap="PackageHeaderMap">
+		select row_number() OVER () as rnum,
+		defect.* ,
+		sftm.GET_CODENAME('B001', defect.defect_code) defect_name,
+		sftm.GET_CODENAME('A001', defect.defect_type) defect_type_name,
+		to_char(defect.reg_date, 'YYYY-MM-DD') reg_date_str
+		from
+		sftm.itm_defect defect
+		where 1=1
+		<if test="defect_id != null and defect_id != ''">
+			and defect.defect_id = #{defect_id}::bigint
+		</if>
+	</select>
+	<!-- 사용자 조회 -->
+	<select id="selectDefectId" resultType="java.lang.Integer">
+		select
+		nextval('sftm.itm_defect_id_seq'::regclass);
+	</select>
+
+	<select id="selectTestCaseDevId" resultType="java.lang.String"
+		parameterType="java.util.Map">
+		SELECT COALESCE(dev_id, '') FROM sftm.itm_test_case
+		WHERE case_id = #{
+		case_id }::bigint
+	</select>
+
+	<insert id="insertDefect" parameterType="map"
+		useGeneratedKeys="true">
+		INSERT INTO sftm.itm_defect as df
+		(
+		defect_id ,
+		project_id,
+		scenario_id,
+		case_id,
+		title,
+		description,
+		defect_type,
+ 		defect_code,
+		dev_id,
+		test_id,
+		reg_user,
+		reg_date,
+		imgkey
+		)
+		VALUES (
+		#{ defect_id }::bigint,
+		(select project_id from sftm.itm_scenario sc where  sc.scenario_id = #{ scenario_id }::bigint),
+		#{ scenario_id }::bigint,
+		#{ case_id
+		}::bigint,
+		#{ title },
+		#{ description },
+		#{ defect_type },
+		#{ defect_code },
+		( SELECT dev_id 
+			FROM sftm.itm_test_case 
+			WHERE case_id = #{ case_id}::bigint
+		),
+		#{ cookieUserId },
+		#{ cookieUserId },
+		now() ,
+		#{ imgkey }::bigint
+		)
+	</insert>
+
+
+
+	<insert id="insertDefectHistory" parameterType="map"
+		useGeneratedKeys="true">
+		INSERT INTO sftm.itm_defect_history
+		(
+			defect_id ,
+			seq,
+			defect_code,
+			defect_type,
+			dev_id,
+			test_id,
+			reg_user,
+			reg_date
+		)
+		VALUES (
+			#{ defect_id }::bigint,
+			(
+				select COALESCE(max(seq), 0)+1 
+				FROM sftm.itm_defect_history where
+				defect_id=#{ defect_id }::bigint
+			),
+			#{ defect_code },
+			#{ defect_type },
+			( 
+				select dev_id 
+				from sftm.itm_test_case 
+				where case_id = #{ case_id}::bigint
+			),
+			#{ cookieUserId },
+			#{ reg_user },
+			now()
+		)
+	</insert>
+	
+	
+	<insert id="updateDefectHistory" parameterType="map"
+		useGeneratedKeys="true">
+		INSERT INTO sftm.itm_defect_history
+		(
+			defect_id ,
+			seq,
+			defect_code,
+			defect_type,
+			dev_id,
+			test_id,
+			reg_user,
+			reg_date
+		)
+		VALUES (
+			#{ defect_id }::bigint,
+			(
+				select COALESCE(max(seq), 0)+1 
+				FROM sftm.itm_defect_history where
+				defect_id=#{ defect_id }::bigint
+			),
+			#{ defect_code },
+			#{ defect_type },
+			#{ dev_id },
+			#{ test_id },
+			#{ cookieUserId },
+			now()
+		)
+	</insert>
+	
+	
+	<update id="updateDefectState" parameterType="map" useGeneratedKeys="true">
+		update sftm.itm_defect
+		set modify_date = now()
+			, modify_user = #{ cookieUserId }
+		    <if test="developer_id != null and developer_id != ''">
+				, dev_id = #{developer_id}
+			</if>
+			<if test="defect_code != null and defect_code != ''">
+				, defect_code = #{defect_code}
+			</if>
+			<if test="defect_type != null and defect_type != ''">
+				, defect_type = #{defect_type}
+			</if>
+			<if test="imgkey != null and imgkey != ''">
+				, imgkey = #{ imgkey }::bigint
+			</if>
+		where defect_id = #{defect_id}::bigint
+	</update>
+
+	<!-- 사용자 조회 -->
+	<select id="selectDefectHistory" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+		select his.defect_id
+				, his.seq
+				, sftm.get_codename('A001', his.defect_type) as defect_type
+				, sftm.get_codename('B001', his.defect_code) as defect_code
+				, coalesce(us.name, '자동배정') as name
+				, coalesce(dev.name, '') as dev_name
+				, to_char(his.reg_date, 'YYYY-MM-DD HH24:MI') reg_date
+		from sftm.itm_defect_history his
+			left outer join sftm.itm_user us
+				on his.reg_user = us.user_id
+			left outer join sftm.itm_user dev
+				on his.dev_id = dev.user_id
+		where his.defect_id = #{defect_id}::bigint
+		order by his.reg_date
+		
+	</select>
+	
+	<!-- 배치에서 결함처리 오랜시간 지난건들 조회하는 쿼리입니다. -->
+	<select id="selectDelayDefect" parameterType="java.util.Map"
+		resultMap="PackageHeaderMap">
+		select df.defect_id, 
+				df.title, 
+				df.reg_user, 
+				df.defect_user,
+				dh.defect_code, 
+				dh.reg_user sender,
+				dh.reg_date,
+				to_char(dh.reg_date, 'YYYY-MM-DD HH24:MI') reg_date_str
+		from sftm.itm_defect df, 
+		     sftm.itm_defect_history dh
+		where df.defect_id = dh.defect_id
+		and dh.seq = (select max(seq) from sftm.itm_defect_history idh where dh.defect_id=idh.defect_id)
+		and dh.defect_code != 'B001_06'
+		order by dh.reg_date
+	</select>
+	
+	<!-- 결함 리스트 조회 -->
+	<select id="selectDefectListByCond" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	   select  sc.scenario_id
+		        , sc.scenario_name
+			    , sc.scenario_code
+		        , df.case_id
+			    , cs.case_name
+				, df.defect_type
+				, sftm.GET_CODENAME('A001', df.defect_type) as defect_type_name
+				, df.defect_code
+				, sftm.GET_CODENAME('B001', df.defect_code) as defect_code_name
+				, df.defect_id
+				, df.title
+				, df.description
+				, tu.user_id as tester_id
+				, coalesce(tu.name, '') as tester_name
+				, du.user_id as developer_id
+				, coalesce(du.name, '') as developer_name
+				, to_char(df.reg_date, 'YYYY-MM-DD HH24:MI') reg_date
+				, COALESCE(to_char(df.resolve_date, 'YYYY-MM-DD HH24:MI'), '-') resolve_date
+		from sftm.itm_defect df
+			   left outer join sftm.itm_user tu on df.test_id = tu.user_id
+			   left outer join sftm.itm_user du on df.dev_id = du.user_id
+		     , sftm.itm_test_case cs
+		     , sftm.itm_scenario sc
+		     <if test="team_id != null and team_id != ''" >
+				  left outer join sftm.itm_div div 
+				   on div.div_id = sc.div_id
+		     </if>
+<!-- 			 , sftm.itm_defect_history his -->
+		where 1=1
+		  and df.scenario_id = cs.scenario_id
+		  and df.case_id = cs.case_id
+		  and cs.scenario_id = sc.scenario_id
+			<if test="test_id != null and test_id != ''" >
+				and df.test_id = #{test_id} 
+			</if>
+			<if test="dev_id != null and dev_id != ''" >
+				and df.dev_id = #{dev_id} 
+			</if>
+			<if test="project_id != null and project_id != ''">
+				and df.project_id = #{project_id}::bigint 
+			</if>  
+			<if test="team_id != null and team_id != ''" >
+				and div.team_id = #{team_id}::bigint 
+		    </if>
+		    <if test="defect_code_type == '1' or defect_code_type == 1">
+		    	-- 개발자확인건 (배정완료, 조치반려)
+				and df.defect_code in ( 'B001_02', 'B001_07' )  
+			</if>
+		    <if test="defect_code_type == '2' or defect_code_type == 2">
+		    	-- 현업확인건 (조치완료, 미조치건)
+				and df.defect_code in ( 'B001_03', 'B001_04' )  
+			</if>
+		    <if test="defect_code_type == '3' or defect_code_type == 3">
+		    	-- 개발지연 
+				and df.defect_code = 'B001_05'
+			</if>
+			<if test="defect_code_type == '4' or defect_code_type == 4">
+		    	-- 미배정건 (PL)
+				and df.defect_code = 'B001_01'
+			</if>
+			<if test="defect_code_type == '5' or defect_code_type == 5">
+		    	-- 결함종료
+				and df.defect_code = 'B001_06'
+			</if>
+	</select>
+	
+	<select id="selectDefectDetailByDefectId" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	   select  sc.scenario_id
+		        , sc.scenario_name
+			    , sc.scenario_code
+		        , df.case_id
+			    , cs.case_name
+				, df.defect_type
+				, sftm.GET_CODENAME('A001', df.defect_type) as defect_type_name
+				, df.defect_code
+				, sftm.GET_CODENAME('B001', df.defect_code) as defect_code_name
+				, df.defect_id
+				, df.title
+				, df.description
+				, tu.user_id as tester_id
+				, coalesce(tu.name, '') as tester_name
+				, du.user_id as developer_id
+				, coalesce(du.name, '') as developer_name
+				, to_char(df.reg_date, 'YYYY-MM-DD HH24:MI') reg_date
+				, COALESCE(to_char(df.resolve_date, 'YYYY-MM-DD HH24:MI'), '-') resolve_date
+				, div.name div_name1
+				, div2.name div_name2
+				, div3.name div_name3
+				, div3.name || ' > ' || div2.name  || ' > ' || div.name as div_name_total
+				, df.imgkey
+		from sftm.itm_defect df
+			   left outer join sftm.itm_user tu on df.test_id = tu.user_id
+			   left outer join sftm.itm_user du on df.dev_id = du.user_id
+		     , sftm.itm_test_case cs
+		     , sftm.itm_scenario sc
+		       left outer join sftm.itm_div div on sc.div_id = div.div_id
+					left outer join sftm.itm_div div2 on div2.div_id = div.upcode
+						left outer join sftm.itm_div div3 on div3.div_id = div2.upcode
+		where 1=1
+		  and df.defect_id = #{defect_id}::bigint 
+		  and df.scenario_id = cs.scenario_id
+		  and df.case_id = cs.case_id
+		  and cs.scenario_id = sc.scenario_id
+	</select>
+			
+</mapper>

@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="UserDAO">
+ 	<resultMap id="PackageHeaderMap"               type="java.util.HashMap">
+       <result property="java.lang.String"         column="row_id"/>
+       <result property="object"                   column="PackageBeanResult"/>
+    </resultMap>
+    
+    <!-- 사용자 조회 -->
+	<select id="selectUser" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	    SELECT us.user_id
+				, us.name
+				, us.position
+				, tm.name as team_name
+				, tm.id as team_id
+				, tm.role_code
+		FROM sftm.itm_user us
+			left outer join sftm.itm_team tm
+				on us.team_id = tm.id
+		where 1=1
+        <if test="password != null and password != ''"> 
+        	AND us.password = #{password}
+        </if>
+        <if test="user_id != null and user_id != ''"> 
+        	AND us.user_id = #{user_id}
+       	</if>
+	</select>
+    
+  	<!-- SFTM 2020 > 사용자 > 팀관리 > 팀원조회 -->
+  	<select id="selectTeamList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	  	SELECT 
+	  		row_number() OVER () as rnum
+	  		, team.id
+	  		, team.name
+	  		, team.role_code
+	  		, team.description
+	  		, team.reg_user
+	  		, COALESCE(team.reader_id, '') reader_id
+	  		, COALESCE(us.name, 'TBD') reader_name
+	  		, role.name roleName 
+	  		, (SELECT COUNT(*) FROM sftm.itm_user usr WHERE usr.team_id = team.id) as user_cnt
+	  		, to_char(team.reg_date, 'YYYY-MM-DD') reg_date_str
+		FROM sftm.itm_team team
+		  LEFT OUTER JOIN sftm.itm_user us ON team.reader_id = us.user_id
+		     ,sftm.itm_role role
+		WHERE team.role_code = role.code
+		<if test="role_code != null and role_code != ''"> 
+			AND team.role_code = #{role_code} 
+		</if>
+		and team.role_code != 'ADMIN'
+		ORDER BY team.name
+  	</select>
+  	
+  	<!-- 팀 조회 -->
+  	<select id="selectRoleList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	  	SELECT *
+		FROM sftm.itm_role role
+  	</select>
+  	
+  	
+  	<!-- 팀명으로 팀 아이디 조회하는 로직 -->
+  	<select id="selectTeamIdbyName" resultType="string" parameterType="map">
+	    SELECT ID ||''
+		FROM SFTM.ITM_TEAM
+		WHERE name = #{name}
+		LIMIT 1
+	</select>
+  	
+  	<insert id="insertNewTeam" parameterType="map" useGeneratedKeys="true">
+  		<selectKey resultType="long" keyProperty="id" order="BEFORE">
+        	SELECT  nextval('sftm.itm_team_id_seq'::REGCLASS) as id
+        </selectKey>
+        INSERT INTO sftm.itm_team (
+            id,
+            project_id,
+            role_code,
+            name,
+            description,
+            reg_user,
+            reg_date,
+            modify_user,
+            modify_date
+        ) VALUES (
+            #{ id },
+            #{ project_id }::bigint,
+            #{ role_code },
+            #{ name },
+            #{ description },
+            #{ reg_user },
+            NOW(),
+            #{ modify_user },
+            NOW()
+        )
+  	</insert>
+  	
+	<!-- 팀 수정 -->
+    <update id="updateTeam" parameterType="java.util.HashMap">
+    UPDATE
+        sftm.itm_team
+    SET
+        name = #{name},
+        description = #{description},
+        role_code =  #{ role_code },
+        modify_user = #{modify_user},
+        modify_date = NOW()
+    WHERE
+        id = #{id}::bigint;
+    </update> 
+    
+    <update id="updateTeamReader" parameterType="java.util.HashMap">
+    UPDATE
+        sftm.itm_team
+    SET
+        reader_id = #{user_id}
+    WHERE
+        id = #{team_id}::bigint;
+    </update> 
+    
+    
+     <delete id="deleteUserByTeam" parameterType="java.util.HashMap">
+    DELETE FROM
+        sftm.itm_user
+    WHERE
+        team_id = #{id}::bigint;
+    </delete> 
+    
+    <delete id="deleteTeam" parameterType="java.util.HashMap">
+    DELETE FROM
+        sftm.itm_team
+    WHERE
+        id = #{id}::bigint;
+    </delete> 
+    
+    
+    <select id="selectTeamUserList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	   select '팀장' as team_state, us.* 
+			from sftm.itm_user us, sftm.itm_team tm
+			where us.user_id = tm.reader_id
+			and tm.id = #{id}::bigint
+		union all
+			select  '팀원' as team_state, us.* 
+			from sftm.itm_user us, sftm.itm_team tm
+			where us.team_id = tm.id
+			and us.user_id != COALESCE(tm.reader_id, '')
+			and tm.id = #{id}::bigint
+	</select>
+	
+	
+    <select id="selectUserList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	   SELECT  
+	   		password,
+			user_id, 
+			usr.name,
+			phone_num, 
+			COALESCE(sex, '') sex, 
+			organization,
+			COALESCE(usr.position, '') AS position,
+			COALESCE(birth, '') birth,
+			team.name as team_name,
+			usr.team_id,
+			team.role_code
+		FROM
+			sftm.itm_user usr
+			, sftm.itm_team team
+		WHERE  usr.team_id = team.id
+		     and ( usr.use_yn is null or usr.use_yn != 'N')
+	    <if test="team_id != null and team_id != ''"> 
+       		 AND usr.team_id = #{team_id}::bigint
+        </if> 
+        <if test="role_code != null and role_code != ''"> 
+			AND team.role_code = #{role_code} 
+		</if>
+		ORDER BY team.name, usr.name
+	</select>
+	
+    <update id="upsertUser" parameterType="java.util.HashMap">
+<!--     {role=, phone=, organization=ㅅㄷㄴㅅ, name=이성준, description=, id=02232, team=현업테스터, email=} -->
+    	<selectKey resultType="long" keyProperty="team_id" order="BEFORE">
+        	SELECT id FROM sftm.itm_team where name = #{team_name}
+        </selectKey>
+    	WITH upsert AS (
+    						UPDATE sftm.itm_user
+    						SET name = #{name},
+						        phone_num = #{phone_num},
+						        sex =  #{sex},
+						        birth =  #{birth},
+						         organization = #{organization},
+						        "position" = #{position},
+						        team_id = #{team_id}::bigint, 
+						        modify_date = NOW()
+						    WHERE user_id = #{user_id}
+						    RETURNING *
+    					)
+    	   INSERT INTO sftm.itm_user
+    	   ( user_id, password, "name", phone_num, sex, organization, "position", birth, team_id,  reg_user, reg_date, modify_user, modify_date, admin)
+			SELECT  
+				#{ user_id }, 
+				#{ user_id }, 
+				#{ name }, 
+				#{ phone_num }, 
+				#{ sex }, 
+				#{ organization }, 
+				#{ position }, 
+				#{ birth }, 
+				#{ team_id }::bigint,
+				#{ reg_user }, 
+				now(), 
+				#{ reg_user }, 
+				now(),
+				'FALSE'
+			WHERE NOT EXISTS (SELECT * FROM upsert)
+			
+			
+    </update>
+    
+    
+    <insert id="insertUser" parameterType="map" useGeneratedKeys="true">
+  		
+         INSERT INTO sftm.itm_user
+		( user_id, password, "name", phone_num, birth, organization, "position", sex, team_id,  reg_user, reg_date, modify_user, modify_date, admin)
+		VALUES(  
+			#{ user_id }, 
+			#{ user_id }, 
+			#{ name }, 
+			#{ phone_num }, 
+			#{ birth }, 
+			#{ organization }, 
+			#{ position }, 
+			#{ sex }, 
+			#{ team_id }::bigint,
+			#{ reg_user }, 
+			now(), 
+			#{ modify_user }, 
+			now(),
+			'FALSE'
+		);
+  	</insert>
+  	
+  	<!-- 팀 수정 -->
+    <update id="updateUser" parameterType="java.util.HashMap">
+    UPDATE
+        sftm.itm_user
+    SET
+        name = #{name},
+        phone_num = #{phone_num},
+        sex =  #{sex},
+        birth =  #{birth},
+        organization = #{organization},
+        "position" = #{position},
+        team_id = #{team_id}::bigint, 
+        modify_date = NOW()
+    WHERE
+        user_id = #{user_id}
+    </update> 
+  	
+  	<delete id="deleteUser" parameterType="java.util.HashMap">
+  	 update sftm.itm_user
+  	 set use_yn = 'N'
+	 where user_id = #{user_id}
+    </delete> 
+
+</mapper>

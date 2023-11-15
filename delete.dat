@@ -1,0 +1,4 @@
+TABLE|delete_table1||
+COLUMN|delete_table1|delete_col1|
+COLUMN|delete_table2|delete_col2|
+COLUMN|delete_table2|delete_col3|

@@ -1,0 +1,514 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="ScenarioDAO">
+ 	<resultMap id="PackageHeaderMap"               type="java.util.HashMap">
+       <result property="java.lang.String"         column="row_id"/>
+       <result property="object"                   column="PackageBeanResult"/>
+    </resultMap>
+    
+    <!-- 시나리오 조회 로직 -->
+	<select id="selectScenarioList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	   SELECT div.div_id
+	    	, div.project_id
+	    	, div3.name as upup_name
+	    	, div2.name as up_name
+	    	, div.name 
+	    	, div.depth
+	    	, div3.div_id as upupcode
+	    	, div.upcode
+	    	, div.reg_user
+	    	, div.reg_date 
+	    	, div.team_id
+	    	, coalesce(tm.name, '') as team_name
+	    	, COALESCE(tm.reader_id, '')
+	    	, COALESCE(us.name , '') as reader_name
+	    	, (select count(*) from sftm.itm_div div5 where div.div_id = div5.upcode) as sub_team_cnt
+	    FROM
+	        sftm.itm_div div
+	        LEFT OUTER JOIN sftm.itm_div div2 ON div.upcode = div2.div_id
+	        LEFT OUTER JOIN sftm.itm_div div3 ON div2.upcode = div3.div_id
+	        LEFt OUTER JOIN sftm.itm_team tm ON div.team_id = tm.id
+	        LEFT OUTER JOIN sftm.itm_user us ON tm.reader_id = us.user_id
+	    WHERE 1=1
+		<if test="depth != null and depth != ''">
+        AND div.depth = #{depth}
+        </if>
+		<if test="upcode != null and upcode != ''">
+        AND div.upcode = #{upcode}
+        </if>    
+		<if test="upupcode != null and upupcode != ''">
+        AND div.upcode in (SELECT div2.div_id FROM sftm.itm_div div2 WHERE div2.depth = 'B' AND div2.upcode = #{upupcode})
+        </if>   
+        
+        order by div3.name , div2.name, div.name
+        
+	</select>
+	
+	
+	<select id="selectDivisionId" resultType="string" parameterType="map">
+	    select #{depth} ||  LPAD( nextval('sftm.itm_div_id_seq'::REGCLASS)||'', 4, '0')
+	</select>
+	
+    <insert id="insertDivision" parameterType="map" useGeneratedKeys="true">
+           	INSERT INTO sftm.itm_div
+			VALUES(
+                 #{div_id},
+				 0,
+				 #{name},
+				 #{depth},
+				 #{upcode},
+				 #{team_id}::bigint,
+				 'admin',
+				 now(),
+				 'admin',
+				 now()
+			 ) 
+  	</insert>
+  	
+  	
+  	<select id="selectDivDepth" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+  		select div.div_id as detpth3
+			, div.upcode as detpth2 
+			, div2.upcode as detpth1 
+		from sftm.itm_div div, sftm.itm_div div2
+		 where div.upcode = div2.div_id
+		 and div.div_id = #{div_id}
+  	</select>
+
+  	<!-- 업무구분코드 수정하기 -->
+    <update id="updateDivision" parameterType="java.util.HashMap">
+    	UPDATE sftm.itm_div 
+		SET name = #{name}, 
+			<if test="team_id != null and team_id != ''">
+				team_id = #{team_id}::bigint,
+			</if>
+			upcode =  #{upcode}
+		WHERE div_id = #{div_id}
+    </update> 
+    
+    
+    <delete id="deleteDivision" parameterType="java.util.HashMap">
+		DELETE
+		FROM sftm.itm_div div
+		WHERE div_id = #{div_id}
+		OR UPCODE = #{div_id}
+		OR UPCODE IN (SELECT div_id FROM sftm.itm_div indiv WHERE indiv.upcode = #{div_id})
+    </delete> 
+
+
+ 	<!-- 사용자 조회 -->
+	<!-- {"depthA":"A0003","depthB":"B0023","depthC":"C0009"} -->
+	<select id="selectScenario" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	    SELECT sc.scenario_id
+			, sc.scenario_code
+			, sc.scenario_name
+			, sc.div_id
+			, sc.is_batch
+			, sc.description
+			, div.name div_name1
+			, div2.name div_name2
+			, div3.name div_name3
+			, div3.name || ' > ' || div2.name  || ' > ' || div.name as div_name_total
+	    FROM
+	        sftm.itm_scenario sc
+			JOIN sftm.itm_div div ON sc.div_id = div.div_id
+			LEFT OUTER JOIN sftm.itm_div div2 ON div2.div_id = div.upcode
+			LEFT OUTER JOIN sftm.itm_div div3 ON div3.div_id = div2.upcode
+	    WHERE 1=1
+	    	<if test="project_id != null and project_id != ''">
+	        	AND sc.project_id = #{project_id}::bigint
+	        </if>
+	    	<if test="depthC != null and depthC != ''">
+	        	AND sc.div_id = #{depthC}
+	        </if>
+	    	<if test="depthB != null and depthB != ''">
+	        	AND div2.div_id = #{depthB}
+	        </if>
+	    	<if test="depthA != null and depthA != ''">
+	        	AND div3.div_id = #{depthA}
+	        </if>
+	        
+	     ORDER BY div3.name, div2.name, div.name
+	</select>
+	
+	
+	<!-- 시나리오 아이디 시퀀스 -->
+	<select id="selectScenarioId" resultType="java.lang.Integer">
+	    select nextval('sftm.itm_defect_id_seq'::regclass);
+	</select>
+	
+	
+	 <insert id="insertScenario" parameterType="map" useGeneratedKeys="true">
+         INSERT INTO sftm.itm_scenario
+         	(
+         		scenario_id,
+         		scenario_code,
+         		scenario_name,
+         		div_id,
+         		is_batch,
+         		project_id,
+         		description,
+         		reg_user, 
+         		reg_date
+         	)
+			VALUES(
+				#{scenario_id}::bigint, 
+				#{scenario_code},
+				#{scenario_name},
+				#{div_id},
+				#{is_batch},
+				#{project_id}::bigint, 
+				#{description},
+				#{cookieUserId},
+				now()
+			)
+  	</insert>
+  	
+  	
+  	<!-- desc : 시나리오 수정  -->
+  	<!-- html : scenario -->
+  	<update id="updateScenario" parameterType="map" useGeneratedKeys="true">
+	  	UPDATE sftm.itm_scenario 
+		SET scenario_name = #{scenario_name}, 
+			scenario_code = #{scenario_code}, 
+			description =  #{description},
+			div_id =  #{div_id},
+			is_batch =  #{is_batch}
+		WHERE scenario_id = #{scenario_id}::bigint
+  	</update>
+  	
+  	<!-- desc : 시나리오 삭제시 하위 테스트 케이스도 같이 삭제  -->
+  	<!-- html : scenario -->
+  	<delete id="deleteTestcaseByUp" parameterType="java.util.HashMap">
+		DELETE
+		FROM sftm.itm_test_case
+		WHERE scenario_id = #{scenario_id} 
+    </delete>
+    
+    <!-- desc : 시나리오 삭제  -->
+  	<!-- html : scenario -->
+    <delete id="deleteScenario" parameterType="java.util.HashMap">
+		DELETE
+		FROM sftm.itm_scenario
+		WHERE scenario_id = #{scenario_id} 
+    </delete>
+  	
+	<!-- testcase Select List  -->
+	<select id="selectTestCaseList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+		SELECT row_number() OVER () as rnum
+			,COALESCE(div3.name, '') depth1
+			,COALESCE(div2.name, '') depth2
+			,COALESCE(div.name, '') depth3
+			,COALESCE(div3.name, '') || '-' || COALESCE(div2.name, '') || '-'  || COALESCE(div.name, '') as div_name
+			,COALESCE(sftm.GET_CODENAME('C001', cs.state), '') as stateStr
+			,COALESCE(test.name, '') test_name 
+			,cs.tester_id 
+			, cs.dev_id
+			,COALESCE(dev.name, '') dev_name
+			,COALESCE(sc.scenario_name, '') scenario_name
+			,cs.scenario_id
+			,cs.case_id
+			,cs.case_name
+			,cs.imgKey
+			,v1.defect_cnt
+			,v1.A001_01
+			,v1.A001_02
+			,v1.A001_03
+			,v1.A001_03 + A001_02 as not_defect_cnt
+			,v1.B001_01
+			,v1.B001_02
+			,v1.B001_03
+			,v1.B001_04
+			,v1.B001_05
+			,v1.B001_06
+			,v1.B001_07
+			,v1.B001_01 + v1.B001_02 + v1.B001_07 as dev_check_cnt
+			,v1.B001_03 + v1.B001_04 as test_check_cnt 
+			,cs.state
+			,cs.description
+			,cs.project_id 
+			,pr.project_name
+			,sc.scenario_code
+		FROM (
+			select ics.case_id
+				, ics.scenario_id
+				, COALESCE( count(*) FILTER(WHERE df.defect_type = 'A001_01'), 0) as A001_01
+				, COALESCE( count(*) FILTER(WHERE df.defect_type = 'A001_02'), 0) as A001_02
+				, COALESCE( count(*) FILTER(WHERE df.defect_type = 'A001_03'), 0) as A001_03 
+				, COALESCE( count(*) FILTER(WHERE df.defect_code = 'B001_01'), 0) as B001_01 
+				, COALESCE( count(*) FILTER(WHERE df.defect_code = 'B001_02'), 0) as B001_02 
+				, COALESCE( count(*) FILTER(WHERE df.defect_code = 'B001_03'), 0) as B001_03 
+				, COALESCE( count(*) FILTER(WHERE df.defect_code = 'B001_04'), 0) as B001_04 
+				, COALESCE( count(*) FILTER(WHERE df.defect_code = 'B001_05'), 0) as B001_05 
+				, COALESCE( count(*) FILTER(WHERE df.defect_code = 'B001_06'), 0) as B001_06 
+				, COALESCE( count(*) FILTER(WHERE df.defect_code = 'B001_07'), 0) as B001_07 
+				, COALESCE( count(*) FILTER(WHERE df.defect_code != ''), 0) as defect_cnt 
+			FROM sftm.itm_test_case ics
+			 LEFT OUTER JOIN sftm.itm_defect df ON ics.scenario_id = df.scenario_id and ics.case_id = df.case_id
+				,sftm.itm_scenario isc
+				where ics.scenario_id = isc.scenario_id
+				<if test="project_id != null and project_id != ''">
+					AND isc.project_id = #{project_id}::bigint
+				</if>
+				
+				<if test="scenario_id != null and scenario_id != ''">
+					AND ics.scenario_id = #{scenario_id}::bigint
+				</if>
+				<if test="case_id != null and case_id != ''">
+					AND ics.case_id = #{case_id}::bigint
+				</if>
+				<if test="dev_id != null and dev_id != ''">
+					AND ics.dev_id = #{dev_id}
+				</if>
+				<if test="tester_id != null and tester_id != ''">
+					AND ics.tester_id = #{tester_id}
+				</if>
+				<if test="state != null and state != ''">
+					AND ics.state = #{state}
+				</if>
+			GROUP BY ics.case_id, ics.scenario_id
+		) as v1
+		, sftm.itm_test_case cs
+			LEFT JOIN sftm.itm_user test ON cs.tester_id = test.user_id
+			LEFT JOIN sftm.itm_user dev ON cs.dev_id = dev.user_id   
+			LEFT JOIN sftm.itm_scenario sc ON cs.scenario_id = sc.scenario_id
+			, sftm.itm_div div
+			LEFT OUTER JOIN sftm.itm_div div2 ON div2.div_id = div.upcode
+			LEFT OUTER JOIN sftm.itm_div div3 ON div3.div_id = div2.upcode
+		, sftm.itm_project pr
+		where v1.scenario_id = cs.scenario_id 
+		and v1.case_id = cs.case_id
+		and cs.project_id = pr.id
+		and sc.div_id = div.div_id
+		<if test="divA != null and divA != ''">
+			AND div3.div_id = #{divA}
+		</if>
+		<if test="divB != null and divB != ''">
+			AND div2.div_id = #{divB}
+		</if>
+		<if test="divC != null and divC != ''">
+			AND div.div_id = #{divC}
+		</if>
+		
+	</select>
+	
+	<!-- desc : 시나리오 액셀 다운로드  -->
+  	<!-- html : scenario -->
+  	<select id="selectTestCaseListForExcel" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+  		select
+  			 sc.scenario_id || '' as scenario_id,  
+			 sc.scenario_code,
+			 sc.scenario_name,
+			 sc.description as scenario_desc,
+			 sc.is_batch, 
+			 tc.case_id || '' as case_id,  
+			 tc.case_name,
+			 tc.description as case_desc,
+			 test.user_id tester_id,
+			 test.name tester_name,
+			 team1.name tester_team,
+			 dev.user_id developer_id,
+			 dev.name developer_name,
+			 team2.name developer_team,
+			 div3.name || '-' || div2.name || '-' || div.name as div_name
+  		     , sc.project_id || '-' || pr.project_name as project_id
+  		     , pr.project_name 
+		from sftm.itm_scenario sc
+		left outer join sftm.itm_test_case tc on sc.scenario_id = tc.scenario_id
+		LEFT OUTER JOIN sftm.itm_user test ON tc.tester_id = test.user_id
+		LEFT OUTER JOIN sftm.itm_team team1 ON test.team_id = team1.id
+		LEFT OUTER JOIN sftm.itm_user dev  ON tc.dev_id = dev.user_id   
+		LEFT OUTER JOIN sftm.itm_team team2 ON dev.team_id = team2.id
+		LEFT OUTER JOIN sftm.itm_div div   ON sc.div_id = div.div_id
+		LEFT OUTER JOIN sftm.itm_div div2  ON div2.div_id = div.upcode
+		LEFT OUTER JOIN sftm.itm_div div3  ON div3.div_id = div2.upcode
+		, sftm.itm_project pr
+		where 1=1
+		and pr.id = sc.project_id
+		<if test="scenario_id != null and scenario_id != ''">
+			AND sc.scenario_id = #{scenario_id}::bigint
+		</if>
+		ORDER BY div3.name || '-' || div2.name || '-' || div.name, sc.scenario_id
+	</select>
+	
+	
+	<!-- desc : 시나리오 액셀 다운로드 드랍다운 박스용  -->
+  	<!-- html : scenario -->
+  	<select id="selectDivListForExcel" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+  		SELECT DIV3.NAME || '-' || DIV2.NAME || '-' || DIV.NAME AS div_name,
+		DIV.DIV_id
+		FROM SFTM.ITM_DIV DIV
+		LEFT OUTER JOIN SFTM.ITM_DIV DIV2 ON DIV.UPCODE = DIV2.DIV_ID
+		LEFT OUTER JOIN SFTM.ITM_DIV DIV3 ON DIV2.UPCODE = DIV3.DIV_ID
+		WHERE DIV.DEPTH = 'C'
+	</select>
+		
+	<!-- desc : 업무분류 액셀 다운로드 드랍다운 박스용  -->
+  	<!-- html : division  resultType="string"> -->
+<!--   	<select id="selectDivListForExcel2" parameterType="java.util.Map" resultMap="PackageHeaderMap"> -->
+	<select id="selectDivListForExcel2" parameterType="java.util.Map" resultType="string">
+  		SELECT DV.DIV_ID 
+		FROM SFTM.ITM_DIV AS DV
+		WHERE 1=1
+		<if test="name != null and name != ''">
+        	AND DV.NAME = #{name}
+        </if>
+		<if test="depth != null and depth != ''">
+        	AND DV.DEPTH = #{depth}
+        </if>
+		<if test="upcode != null and upcode != ''">
+        	AND DV.UPCODE = #{upcode}
+        </if>
+        LIMIT 1
+	</select>	
+	
+	
+		<!-- 사용자 조회 -->
+	<select id="selectTestcaseId" resultType="java.lang.Integer">
+	    select nextval('sftm.itm_test_case_id_seq'::regclass);
+	</select>
+	
+	
+	
+	<insert id="insertTestcase" parameterType="map" useGeneratedKeys="true">
+   
+		INSERT INTO sftm.itm_test_case
+		VALUES(
+			#{scenario_id}::bigint, -- scenario_id
+			#{case_id}::bigint,  --
+			#{case_name},
+			(select project_id from sftm.itm_scenario sc where scenario_id = #{scenario_id}::bigint),
+			#{tester_id},
+			#{dev_id},
+			'C001_01', --state
+			#{description},
+			'admin',
+			now(),
+			-1,
+			'admin',
+			now()
+			)
+  	</insert>
+  	
+  	<update id="updateTestcase" parameterType="map" useGeneratedKeys="true">
+    	UPDATE sftm.itm_test_case 
+		SET case_name 	= #{case_name}, 
+			tester_id 		=  #{tester_id}, 
+			dev_id 			=  #{dev_id}, 
+			description 	=  #{description} 
+		WHERE case_id = #{case_id}::bigint 
+		AND scenario_id 	= #{scenario_id}::bigint
+    </update> 
+    
+    <update id="updateTestCaseOnlyState" parameterType="map" useGeneratedKeys="true">
+    	UPDATE sftm.itm_test_case 
+		SET state = #{state} 
+		WHERE case_id = #{case_id}::bigint 
+		AND scenario_id 	= #{scenario_id}::bigint
+    </update> 
+    
+    
+    <update id="updateTestcaseOnlyState" parameterType="map" useGeneratedKeys="true">
+    	UPDATE sftm.itm_test_case 
+		SET state = #{state} 
+		WHERE case_code = #{case_code} 
+		AND scenario_code 	= #{scenario_code}
+    </update> 
+    
+  	<delete id="deleteTestcase" parameterType="java.util.HashMap">
+		DELETE
+		FROM sftm.itm_test_case
+		WHERE case_id 	= #{case_id} 
+		AND scenario_id 	= #{scenario_id}
+    </delete>
+    
+     
+	
+	<!-- 시나리오ID, 테스트케이스ID로 시나리오와 연관된 정보 조회 -->
+	<select id="selectScenarioInfo" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+		SELECT dv.team_id, tm.reader_id, us.user_id, us.name
+		FROM sftm.itm_scenario sc
+			, sftm.itm_div dv
+			, sftm.itm_team tm
+			, sftm.itm_user us
+		WHERE 1=1  
+		<if test="scenario_id != null and scenario_id != ''">
+			and sc.scenario_id = #{scenario_id}::bigint
+		</if> 
+		AND sc.div_id = dv.div_id
+		and dv.team_id = tm.id
+		and tm.reader_id = us.user_id
+	</select>
+	
+	<insert id="insertComment" parameterType="map"
+		useGeneratedKeys="true">
+		INSERT INTO sftm.itm_comment
+		(
+			id,
+	  		project_id,
+	  		type_code,  -- t(testcase comment)/d(defect comment) 
+	  		case_id,
+	  		defect_id,
+	  		user_id,
+	  		msg,  
+	  		use_yn,
+	  		reg_user, 			-- 등록자
+	  		reg_date
+		)
+		VALUES (
+			nextval('sftm.itm_comment_id_seq'::regclass),
+			0,
+			#{type_code},
+			#{case_id}::bigint,
+			#{defect_id}::bigint,
+			#{cookieUserId},
+			#{comment},
+			'y',
+			#{cookieUserId},
+			now()
+		)
+	</insert>
+	<select id="selectComment" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+		select cm.user_id
+			, cm.msg
+			, us.name
+			, cm.reg_date
+			, sftm.GET_WHAT_DAY(cm.reg_date) reg_date_str
+		from sftm.itm_comment cm, sftm.itm_user us
+		where 1=1
+		<if test="case_id != null and case_id != ''">
+			and cm.type_code = 't'
+			and cm.case_id = #{case_id}::bigint
+		</if>
+		<if test="defect_id != null and defect_id != ''">
+			and cm.type_code = 'd'
+			and cm.defect_id = #{defect_id}::bigint
+		</if>
+		and cm.use_yn = 'y'
+		and cm.msg is not null
+		and cm.user_id = us.user_id
+		order by cm.id desc
+	</select>
+	
+	
+	<update id="updateTestCaseDetail" parameterType="map" useGeneratedKeys="true">
+		update sftm.itm_test_case
+		set imgkey = #{imgkey}::bigint
+			<if test="state != null and state != ''">
+		    ,state = #{state} 
+		    </if>
+			<if test="cookieUserId != null and cookieUserId != ''">
+		   	 	,modify_user = #{cookieUserId}
+			</if>
+			,modify_date = now()
+		WHERE 1=1 
+		<if test="scenario_id != null and scenario_id != ''">
+			and scenario_id 	= #{scenario_id}::bigint
+		</if>
+		AND case_id 		= #{case_id}::bigint 
+	</update>
+	
+<!-- 	 -->
+		
+</mapper>

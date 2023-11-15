@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="CodeDAO">
+ 	<resultMap id="PackageHeaderMap"               type="java.util.HashMap">
+       <result property="java.lang.String"         column="row_id"/>
+       <result property="object"                   column="PackageBeanResult"/>
+    </resultMap>
+    
+    <!-- 코드 그룹 조회 -->
+	<select id="selectCodeGroupList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	    SELECT  gp.*,
+	    	(select COUNT(*) from sftm.itm_code cd where cd.code_group =  gp.code_group ) as code_cnt
+	    FROM sftm.itm_code_group gp
+	</select>
+	
+  	<select id="selectCodeList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	    SELECT  cd.* , 
+	       to_char(cd.reg_date, 'YYYY-MM-DD') reg_date_str
+	    FROM sftm.itm_code cd
+	    WHERE code_group = #{code_group}
+	</select>
+	
+	<insert id="insertCodeGroup" parameterType="map" useGeneratedKeys="true">
+		INSERT INTO sftm.itm_code_group
+		(	
+			code_group, 
+			code_group_name, 
+			description, 
+			use_yn, 
+			reg_user, 
+			reg_date
+		)
+		VALUES 
+		(
+			#{code_group}, 
+			#{code_group_name}, 
+			#{description}, 
+			#{use_yn}, 
+			#{cookieUserId}, 
+			now()
+		)
+	</insert>
+	
+	
+	<!-- 팀 수정 -->
+    <update id="updateCodeGroup" parameterType="java.util.HashMap">
+    UPDATE
+        sftm.itm_code_group
+    SET
+        code_group_name = #{code_group_name},
+        description = #{description},
+        use_yn =  #{use_yn},
+        reg_user =  #{cookieUserId}, 
+        reg_date =  now()
+    WHERE
+        code_group = #{code_group}
+    </update> 
+    
+    
+    <insert id="insertCode" parameterType="map" useGeneratedKeys="true">
+		INSERT INTO sftm.itm_code
+		(
+			code_group, 
+			code_id, 
+			code_name, 
+			description,
+			use_yn, 
+			priority, 
+			reg_user, 
+			reg_date
+		)
+		VALUES (
+			#{code_group}, 
+			#{code_id},  
+			#{code_name},  
+			#{description},  
+			#{use_yn},  
+			#{priority}::bigint,  
+			#{cookieUserId},  
+			now()
+		)
+	</insert>
+	
+	
+	<!-- 팀 수정 -->
+    <update id="updateCode" parameterType="java.util.HashMap">
+    UPDATE
+        sftm.itm_code
+    SET
+        code_name = #{code_name},
+        priority = #{priority}::bigint,  
+        description = #{description},
+        use_yn =  #{use_yn},
+        reg_user =  #{cookieUserId}, 
+        reg_date =  now()
+    WHERE
+        code_group = #{code_group} AND code_id = #{code_id}
+    </update> 
+    
+    <!-- 테스트케이스 유형 그룹 조회 -->
+	<select id="selectTypeGroupList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	    SELECT TG.ID
+			,TG.TYPE_GROUP
+			,TG.DESCRIPTION
+			,TG.USE_TYPE
+			,CASE WHEN TG.delete_col2 = 'O' THEN 'Online'
+				WHEN TG.USE_TYPE = 'B' THEN 'Batch' 
+				ELSE TG.delete_col3 END AS USE_TYPE_NAME
+			,(SELECT COUNT(*) FROM SFTM.ITM_TYPE TP WHERE TP.TYPE_GROUP_ID = TG.ID ) AS CNT
+		FROM SFTM.ITM_TYPE_GROUP TG
+		 WHERE 1=1
+		<if test="use_type != null and use_type != ''">
+			AND (TG.USE_TYPE = #{use_type} OR TG.USE_TYPE = 'A')
+		</if>
+ 
+	</select>
+	
+	<!-- 테스트케이스 유형 추가 -->
+	<insert id="insertTypeGroup" parameterType="map" useGeneratedKeys="true">
+		INSERT INTO sftm.ITM_TYPE_GROUP
+		(
+			ID, 
+			TYPE_GROUP, 
+			description, 
+			use_type, 
+			reg_user, 
+			reg_date)
+		VALUES 
+		(
+			nextval('sftm.itm_type_group_id_seq'::regclass), 
+			#{type_group}, 
+			#{description}, 
+			#{use_type}, 
+			#{cookieUserId}, 
+			now()
+		)
+	</insert>
+	
+	
+	<!-- 테스트케이스 유형 수정 -->
+    <update id="updateTypeGroup" parameterType="java.util.HashMap">
+    UPDATE
+        sftm.ITM_TYPE_GROUP
+    SET
+        TYPE_GROUP = #{type_group},
+        description = #{description},
+        use_type =  #{use_type},
+        reg_user =  #{cookieUserId}, 
+        reg_date =  now()
+    WHERE
+        ID = #{id}::bigint
+    </update> 
+    
+    <!-- 테스트케이스 유형 삭제 -->
+    <delete id="deleteTypeGroup" parameterType="java.util.HashMap">
+    DELETE FROM 
+        sftm.ITM_TYPE_GROUP
+    WHERE
+        ID = #{id}::bigint
+    </delete>
+    
+    
+    <!-- 테스트케이스 유형 상세 조회 -->
+	<select id="selectTypeList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+	    SELECT TG.TYPE_GROUP
+	    	,TP.ID
+	    	,TP.TYPE_GROUP_ID
+	    	,TP.CASE_NAME
+	    	,TP.CASE_DESC
+	    	,to_char(TP.reg_date, 'YYYY-MM-DD') reg_date_str
+		FROM SFTM.ITM_TYPE TP, SFTM.ITM_TYPE_GROUP TG
+		WHERE TP.type_group_id = TG.id
+		<if test="id != null and id != ''">
+			AND TP.type_group_id = #{id}::bigint
+		</if>
+		ORDER BY TG.TYPE_GROUP, TP.CASE_NAME
+	</select>
+	
+	
+	<!-- 테스트케이스 유형 상세 추가 -->
+	<insert id="insertType" parameterType="map" useGeneratedKeys="true">
+		INSERT INTO sftm.ITM_TYPE
+		(
+			ID, 
+			type_group_id, 
+			case_name, 
+			case_desc, 
+			reg_user, 
+			reg_date)
+		VALUES 
+		(
+			nextval('sftm.itm_type_id_seq'::regclass), 
+			#{type_group_id}::bigint, 
+			#{case_name}, 
+			#{case_desc}, 
+			#{cookieUserId}, 
+			now()
+		)
+	</insert>
+	
+	
+	<!-- 테스트케이스 유형 상세 수정 -->
+    <update id="updateType" parameterType="java.util.HashMap">
+    UPDATE
+        sftm.ITM_TYPE
+    SET
+        case_name = #{case_name},
+        case_desc = #{case_desc},
+        reg_user =  #{cookieUserId}, 
+        reg_date =  now()
+    WHERE
+        ID = #{id}::bigint
+    </update> 
+    
+    <!-- 테스트케이스 유형 상세 삭제 -->
+    <delete id="deleteType" parameterType="java.util.HashMap">
+    DELETE FROM 
+        sftm.ITM_TYPE
+    WHERE
+        ID = #{id}::bigint
+    </delete>
+    
+    
+     
+    <!-- 단위/통합테스트 리스트 조회 -->
+	<select id="selectProjectList" parameterType="java.util.Map" resultMap="PackageHeaderMap">
+		select pr.id, 
+				pr.project_name, 
+				pr.start_date, 
+				pr.end_date, 
+				pr.use_yn, 
+				pr.reg_user, 
+				to_char(pr.reg_date, 'YYYY/MM/DD') as reg_date,
+				(select count(*) from sftm.itm_scenario as sc where pr.id = sc.project_id) as sc_count
+		from sftm.itm_project as pr
+		where 1=1
+		<if test="use_yn != null and use_yn != ''">
+			and pr.use_yn = #{use_yn} 
+		</if>
+		order by pr.start_date
+	</select>
+	
+	
+	
+	<insert id="insertProject" parameterType="map" useGeneratedKeys="true" keyProperty="id">
+		INSERT INTO sftm.itm_project
+		(	
+			id, 
+			project_name, 
+			start_date, 
+			end_date, 
+			use_yn, 
+			reg_user, 
+			reg_date
+		)
+		VALUES (
+			nextval('sftm.itm_project_id_seq'::regclass), 
+			#{project_name},
+			#{start_date}, 
+			#{end_date}, 
+			#{use_yn}, 
+			#{cookieUserId}, 
+			now()
+		);
+	</insert>
+	<!-- 테스트케이스 유형 상세 수정 -->
+    <update id="updateProject" parameterType="java.util.HashMap">
+    UPDATE
+        sftm.itm_project
+    SET
+        project_name = #{project_name},
+		start_date = #{start_date}, 
+		end_date = #{end_date}, 
+		use_yn = #{use_yn}, 
+        reg_date =  now()
+    WHERE
+        ID = #{id}::bigint
+    </update> 
+    
+    <!-- 테스트케이스 유형 상세 삭제 -->
+    <delete id="deleteProject" parameterType="java.util.HashMap">
+    DELETE FROM 
+        sftm.itm_project
+    WHERE
+        ID = #{id}::bigint
+    </delete>
+    
+    
+</mapper>
