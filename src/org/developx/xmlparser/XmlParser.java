@@ -71,7 +71,7 @@ public class XmlParser {
      * @param element : XML 노드에 포함된 SQL 전체
      * @return
      */
-    private static Set<String> NO_TARGET_ATTR = Set.of("selectKey");
+    private static Set<String> NO_TARGET_ATTR = Set.of("selectKey", "import");
     public String parseSqlText(Element element) {
         // 단순 getText() 의 경우 if 문등의 내부 데이터를 가져오지 못함
         StringBuilder sb = new StringBuilder();
